@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+    background-image: radial-gradient(#e7e0d2 0.85px, transparent 0.85px);
+    background-size: 22px 22px;
+  }
+  ::selection {
+    @apply bg-signal text-paper;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 font-semibold text-sm
+           border-2 border-ink rounded-none px-5 py-2.5 bg-card
+           shadow-flatSm transition-transform duration-100
+           hover:-translate-y-0.5 active:translate-y-0 active:shadow-none;
+  }
+  .btn-primary { @apply bg-pine text-paper; }
+  .btn-accent  { @apply bg-signal text-paper; }
+  .stamp {
+    @apply inline-block font-mono text-[11px] tracking-[0.2em] uppercase
+           border-2 border-ink px-3 py-1 -rotate-1 bg-card;
+  }
+}
