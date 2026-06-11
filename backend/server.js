@@ -15,7 +15,13 @@ const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173'
 const app    = express()
 const server = createServer(app)
 
-app.use(cors({ origin: CLIENT_URL }))
+app.use(cors({ 
+  origin: [
+    'https://velodrome-mu.vercel.app',
+    'https://velodrome-daksh-saijwal-s-projects.vercel.app',
+    'http://localhost:5173'
+  ] 
+}))
 app.use(express.json())
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }))
@@ -23,7 +29,14 @@ app.use('/api/leaderboard', leaderboardRouter)
 
 // ── Socket.io ─────────────────────────────────────────────────────────────────
 const io = new Server(server, {
-  cors: { origin: CLIENT_URL, methods: ['GET', 'POST'] },
+  cors: { 
+    origin: [
+      'https://velodrome-mu.vercel.app',
+      'https://velodrome-daksh-saijwal-s-projects.vercel.app',
+      'http://localhost:5173'
+    ], 
+    methods: ['GET', 'POST'] 
+  },
 })
 
 registerSocketHandlers(io)
