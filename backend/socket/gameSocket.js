@@ -47,12 +47,12 @@ export function registerSocketHandlers(io) {
     })
 
     // ── Start race ────────────────────────────────────────────────────────
-    socket.on('race:start', ({ code }) => {
+    socket.on('race:start', ({ code, strict }) => {
       const room = rooms.get(code)
       if (!room) return
 
       room.started = true
-      io.to(code).emit('race:start', { passage: room.passage })
+      io.to(code).emit('race:start', { passage: room.passage, strict: !!strict })
       console.log(`🏁 Race started in room ${code}`)
     })
 

@@ -7,7 +7,7 @@ const GAME_DURATION = 60
 // Core game state machine: idle -> countdown -> racing -> finished.
 // Also records a keystroke timeline so a personal best can be
 // replayed later as a "ghost" opponent.
-export function useGame({ mode = 'words', enableGhost = true } = {}) {
+export function useGame({ mode = 'words', enableGhost = true, strict = false } = {}) {
   const [passage, setPassage] = useState('')
   const [typed, setTyped] = useState('')
   const [phase, setPhase] = useState('idle')
@@ -136,6 +136,16 @@ export function useGame({ mode = 'words', enableGhost = true } = {}) {
     if (phase !== 'racing') return
     if (value.length > passage.length) return
 
+    // Strict mode: the space that ends a word is rejected until every
+    // character of the current word is typed correctly.
+    if (strict && value.length > typed.length) {
+      const i = value.length - 1
+      if (passage[i] === ' ' && value[i] === ' ') {
+        const start = passage.lastIndexOf(' ', i - 1) + 1
+        if (value.slice(start, i) !== passage.slice(start, i)) return
+      }
+    }
+
     // New keystroke — log it and track errors per expected character
     if (value.length > typed.length) {
       const i = value.length - 1
@@ -151,7 +161,7 @@ export function useGame({ mode = 'words', enableGhost = true } = {}) {
     setAccuracy(calcAccuracy(value.length, errorsRef.current))
 
     if (value.length >= passage.length) finishGame()
-  }, [phase, typed, passage, finishGame])
+  }, [phase, typed, passage, strict, finishGame])
 
   useEffect(() => {
     reset()

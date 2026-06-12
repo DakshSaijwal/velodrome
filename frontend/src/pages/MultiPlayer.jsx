@@ -28,13 +28,14 @@ export default function MultiPlayer() {
   const [joinInput,  setJoinInput]  = useState('')
   const [joinError,  setJoinError]  = useState('')
   const [players,    setPlayers]    = useState([])
-  const [racers,     setRacers]     = useState([])
+  const [oppProgress, setOppProgress] = useState({})
+  const [strict,     setStrict]     = useState(false)
 
   const {
     passage, typed, phase, countdown,
     timeLeft, wpm, accuracy, progress, charMap,
     startCountdown, handleInput, reset,
-  } = useGame()
+  } = useGame({ strict })
 
   // ── Connect socket on mount ───────────────────────────────────────────────
   useEffect(() => {
@@ -62,36 +63,41 @@ export default function MultiPlayer() {
     setPlayers(p)
   })
 
-  useSocketEvent('race:start', () => {
+  useSocketEvent('race:start', (payload) => {
+    if (payload && typeof payload.strict === 'boolean') setStrict(payload.strict)
     setLobbyPhase(PHASE.RACING)
     startCountdown()
   })
 
   useSocketEvent('race:update', ({ playerId, progress: p, wpm: w }) => {
-    setRacers(prev =>
-      prev.map(r => r.id === playerId ? { ...r, progress: p, wpm: w } : r)
-    )
+    setOppProgress(prev => ({ ...prev, [playerId]: { progress: p, wpm: w } }))
   })
 
   useSocketEvent('race:finished', ({ winner }) => {
     setLobbyPhase(PHASE.FINISHED)
   })
 
-  // ── Sync racers with players list ─────────────────────────────────────────
-  useEffect(() => {
-    setRacers(players.map(p => ({
-      id: p.id, name: p.name,
-      progress: 0, wpm: 0,
-      isYou: p.id === socket?.id,
-    })))
-  }, [players, socket?.id])
-
   // ── Emit progress updates while racing ───────────────────────────────────
+  // The server broadcasts to everyone *except* the sender. Our own car is
+  // computed at render time from live `progress`/`wpm`, so it always moves.
   useEffect(() => {
     if (phase === 'racing') {
       emit('race:progress', { progress, wpm })
     }
   }, [progress, wpm, phase, emit])
+
+  // Build the racer list fresh on every render: your live car + opponents.
+  const racers = players.map(p => {
+    const you = p.id === socket?.id
+    const opp = oppProgress[p.id]
+    return {
+      id: p.id,
+      name: you ? 'you' : p.name,
+      progress: you ? progress : (opp?.progress ?? 0),
+      wpm: you ? wpm : (opp?.wpm ?? 0),
+      isYou: you,
+    }
+  })
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function hostRoom() {
@@ -106,7 +112,7 @@ export default function MultiPlayer() {
   }
 
   function startRace() {
-    emit('race:start', { code: roomCode })
+    emit('race:start', { code: roomCode, strict })
   }
 
   function handlePlayAgain() {
@@ -175,6 +181,15 @@ export default function MultiPlayer() {
               </button>
             </div>
           )}
+
+          <button
+            onClick={() => setStrict(s => !s)}
+            title="Can't pass a word until it's typed correctly"
+            className={`font-mono text-xs border-2 px-3 py-1.5 transition-colors
+              ${strict ? 'border-signal bg-signal text-paper' : 'border-line text-faded hover:border-ink'}`}
+          >
+            strict mode {strict ? 'on' : 'off'}
+          </button>
 
           <button
             onClick={() => navigate('/')}

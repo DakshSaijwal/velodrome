@@ -18,6 +18,7 @@ const MODES = [
 export default function SinglePlayer() {
   const navigate = useNavigate()
   const [mode, setMode] = useState('words')
+  const [strict, setStrict] = useState(false)
   const prevBest = useRef(getGhost()?.wpm ?? 0)
 
   const {
@@ -25,7 +26,7 @@ export default function SinglePlayer() {
     wpm, accuracy, progress, charMap, wpmHistory,
     ghost, troubleKeys,
     startCountdown, handleInput, reset,
-  } = useGame({ mode })
+  } = useGame({ mode, strict })
 
   // Warn if the tab loses focus mid-race — keeps runs honest
   const [blurred, setBlurred] = useState(false)
@@ -60,6 +61,14 @@ export default function SinglePlayer() {
               {m.label}
             </button>
           ))}
+          <button
+            onClick={() => setStrict(s => !s)}
+            title="Can't pass a word until it's typed correctly"
+            className={`font-mono text-xs border-2 px-3 py-1.5 ml-auto transition-colors
+              ${strict ? 'border-signal bg-signal text-paper' : 'border-line text-faded hover:border-ink'}`}
+          >
+            strict {strict ? 'on' : 'off'}
+          </button>
         </div>
       )}
 
