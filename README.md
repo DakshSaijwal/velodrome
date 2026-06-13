@@ -2,7 +2,7 @@
 
 A typing race game with live multiplayer, ghost replays, and per-key analytics.
 
-**Live demo:** https://velodrome-daksh-saijwal-s-projects.vercel.app
+**Live demo:** https://velodrome-mu.vercel.app/
 
 ## Features
 
