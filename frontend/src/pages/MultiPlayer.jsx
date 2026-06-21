@@ -28,6 +28,7 @@ export default function MultiPlayer() {
 
   const [lobbyPhase, setLobbyPhase] = useState(PHASE.HOME)
   const [isHost,     setIsHost]     = useState(false)
+  const [intent,     setIntent]     = useState(null)   // null | 'host' | 'join'
   const [roomCode,   setRoomCode]   = useState('')
   const [joinInput,  setJoinInput]  = useState('')
   const [joinError,  setJoinError]  = useState('')
@@ -159,6 +160,9 @@ export default function MultiPlayer() {
     setLobbyPhase(PHASE.HOME)
     setRoomCode('')
     setPlayers([])
+    setIntent(null)
+    setIsHost(false)
+    setJoinError('')
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -200,23 +204,60 @@ export default function MultiPlayer() {
 
           <div className="flex gap-3 w-full max-w-xs">
             <button
-              onClick={hostRoom}
+              onClick={() => { setIntent('host'); setJoinError('') }}
               disabled={!playerName.trim()}
-              className="flex-1 btn btn-primary !rounded-none py-3 
-                         text-sm hover:opacity-90 disabled:opacity-30 transition-all"
+              className={`flex-1 btn !rounded-none py-3 text-sm transition-all disabled:opacity-30
+                ${intent === 'host' ? 'btn-primary' : 'font-mono hover:border-gray-500'}`}
             >
               Host Room
             </button>
             <button
-              onClick={() => setIsHost(false)}
-              className="flex-1 btn !rounded-none py-3 
-                         text-sm font-mono hover:border-gray-500 transition-all"
+              onClick={() => { setIntent('join'); setJoinError('') }}
+              disabled={!playerName.trim()}
+              className={`flex-1 btn !rounded-none py-3 text-sm transition-all disabled:opacity-30
+                ${intent === 'join' ? 'btn-primary' : 'font-mono hover:border-gray-500'}`}
             >
               Join Room
             </button>
           </div>
 
-          {!isHost && (
+          {/* Host setup — race options only matter to the host */}
+          {intent === 'host' && (
+            <div className="flex flex-col items-center gap-4 w-full max-w-xs">
+              <div className="flex items-center gap-2 flex-wrap justify-center">
+                <span className="font-mono text-xs text-faded uppercase tracking-widest mr-1">words</span>
+                {WORD_LIMITS.map(v => (
+                  <button
+                    key={v}
+                    onClick={() => setWordLimit(v)}
+                    className={`font-mono text-xs border-2 px-3 py-1.5 transition-colors
+                      ${wordLimit === v ? 'border-ink bg-ink text-paper' : 'border-line text-faded hover:border-ink'}`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setStrict(s => !s)}
+                title="Can't pass a word until it's typed correctly"
+                className={`font-mono text-xs border-2 px-3 py-1.5 transition-colors
+                  ${strict ? 'border-signal bg-signal text-paper' : 'border-line text-faded hover:border-ink'}`}
+              >
+                strict mode {strict ? 'on' : 'off'}
+              </button>
+
+              <button
+                onClick={hostRoom}
+                className="w-full btn btn-primary !rounded-none py-3 text-sm hover:opacity-90 transition-all"
+              >
+                Create Room →
+              </button>
+            </div>
+          )}
+
+          {/* Join setup — code entry only */}
+          {intent === 'join' && (
             <div className="flex flex-col gap-2 w-full max-w-xs">
               <input
                 value={joinInput}
@@ -241,29 +282,6 @@ export default function MultiPlayer() {
               </button>
             </div>
           )}
-
-          <div className="flex items-center gap-2 flex-wrap justify-center">
-            <span className="font-mono text-xs text-faded uppercase tracking-widest mr-1">words</span>
-            {WORD_LIMITS.map(v => (
-              <button
-                key={v}
-                onClick={() => setWordLimit(v)}
-                className={`font-mono text-xs border-2 px-3 py-1.5 transition-colors
-                  ${wordLimit === v ? 'border-ink bg-ink text-paper' : 'border-line text-faded hover:border-ink'}`}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
-
-          <button
-            onClick={() => setStrict(s => !s)}
-            title="Can't pass a word until it's typed correctly"
-            className={`font-mono text-xs border-2 px-3 py-1.5 transition-colors
-              ${strict ? 'border-signal bg-signal text-paper' : 'border-line text-faded hover:border-ink'}`}
-          >
-            strict mode {strict ? 'on' : 'off'}
-          </button>
 
           <button
             onClick={() => navigate('/')}
