@@ -15,18 +15,41 @@ const MODES = [
   { id: 'numbers', label: '+numbers' },
 ]
 
+const TIME_LIMITS = [15, 30, 60]
+const WORD_LIMITS = [15, 30, 50, 100]
+
 export default function SinglePlayer() {
   const navigate = useNavigate()
   const [mode, setMode] = useState('words')
   const [strict, setStrict] = useState(false)
+  const [limitType, setLimitType] = useState('time')   // 'time' | 'words'
+  const [timeLimit, setTimeLimit] = useState(60)
+  const [wordLimit, setWordLimit] = useState(30)
   const prevBest = useRef(getGhost()?.wpm ?? 0)
 
+  const limitValue = limitType === 'time' ? timeLimit : wordLimit
+
   const {
-    typed, phase, countdown, timeLeft,
+    typed, phase, countdown, timeLeft, elapsedSeconds,
     wpm, accuracy, progress, charMap, wpmHistory,
     ghost, troubleKeys,
     startCountdown, handleInput, reset,
-  } = useGame({ mode, strict })
+  } = useGame({ mode, strict, limitType, limitValue })
+
+  // Tab restarts a fresh run — but only once a race is underway or done.
+  // On the idle settings screen, Tab is left alone so it still moves focus
+  // between the mode/limit buttons like a normal browser would.
+  useEffect(() => {
+    if (phase === 'idle') return
+    function onKeyDown(e) {
+      if (e.key !== 'Tab') return
+      e.preventDefault()
+      prevBest.current = Math.max(prevBest.current, wpm)
+      reset()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [phase, reset, wpm])
 
   // Warn if the tab loses focus mid-race — keeps runs honest
   const [blurred, setBlurred] = useState(false)
@@ -49,30 +72,65 @@ export default function SinglePlayer() {
       </header>
 
       {phase === 'idle' && (
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-faded uppercase tracking-widest mr-2">mode</span>
-          {MODES.map(m => (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-mono text-xs text-faded uppercase tracking-widest mr-2">mode</span>
+            {MODES.map(m => (
+              <button
+                key={m.id}
+                onClick={() => setMode(m.id)}
+                className={`font-mono text-xs border-2 px-3 py-1.5 transition-colors
+                  ${mode === m.id ? 'border-ink bg-ink text-paper' : 'border-line text-faded hover:border-ink'}`}
+              >
+                {m.label}
+              </button>
+            ))}
             <button
-              key={m.id}
-              onClick={() => setMode(m.id)}
-              className={`font-mono text-xs border-2 px-3 py-1.5 transition-colors
-                ${mode === m.id ? 'border-ink bg-ink text-paper' : 'border-line text-faded hover:border-ink'}`}
+              onClick={() => setStrict(s => !s)}
+              title="Can't pass a word until it's typed correctly"
+              className={`font-mono text-xs border-2 px-3 py-1.5 ml-auto transition-colors
+                ${strict ? 'border-signal bg-signal text-paper' : 'border-line text-faded hover:border-ink'}`}
             >
-              {m.label}
+              strict {strict ? 'on' : 'off'}
             </button>
-          ))}
-          <button
-            onClick={() => setStrict(s => !s)}
-            title="Can't pass a word until it's typed correctly"
-            className={`font-mono text-xs border-2 px-3 py-1.5 ml-auto transition-colors
-              ${strict ? 'border-signal bg-signal text-paper' : 'border-line text-faded hover:border-ink'}`}
-          >
-            strict {strict ? 'on' : 'off'}
-          </button>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-mono text-xs text-faded uppercase tracking-widest mr-2">limit</span>
+            <button
+              onClick={() => setLimitType('time')}
+              className={`font-mono text-xs border-2 px-3 py-1.5 transition-colors
+                ${limitType === 'time' ? 'border-ink bg-ink text-paper' : 'border-line text-faded hover:border-ink'}`}
+            >
+              time
+            </button>
+            <button
+              onClick={() => setLimitType('words')}
+              className={`font-mono text-xs border-2 px-3 py-1.5 transition-colors
+                ${limitType === 'words' ? 'border-ink bg-ink text-paper' : 'border-line text-faded hover:border-ink'}`}
+            >
+              words
+            </button>
+
+            <span className="w-px h-4 bg-line mx-1" />
+
+            {(limitType === 'time' ? TIME_LIMITS : WORD_LIMITS).map(v => (
+              <button
+                key={v}
+                onClick={() => limitType === 'time' ? setTimeLimit(v) : setWordLimit(v)}
+                className={`font-mono text-xs border-2 px-3 py-1.5 transition-colors
+                  ${limitValue === v ? 'border-signal bg-signal text-paper' : 'border-line text-faded hover:border-ink'}`}
+              >
+                {v}{limitType === 'time' ? 's' : ''}
+              </button>
+            ))}
+
+            <span className="font-mono text-[10px] text-faded ml-auto">tab ↹ restarts mid-race</span>
+          </div>
         </div>
       )}
 
-      <StatsBar wpm={wpm} accuracy={accuracy} timeLeft={timeLeft} progress={progress} />
+      <StatsBar wpm={wpm} accuracy={accuracy} timeLeft={limitType === 'time' ? timeLeft : elapsedSeconds} progress={progress} />
 
       {phase !== 'finished' && (
         <>
@@ -113,7 +171,7 @@ export default function SinglePlayer() {
         <ResultsCard
           wpm={wpm}
           accuracy={accuracy}
-          duration={60 - timeLeft}
+          duration={elapsedSeconds}
           chars={typed.length}
           wpmHistory={wpmHistory}
           troubleKeys={troubleKeys}

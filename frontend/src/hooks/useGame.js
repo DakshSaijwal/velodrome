@@ -2,17 +2,28 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { generatePassage, calcWpm, calcAccuracy, buildCharMap } from '../utils/gameUtils'
 import { recordRace, getGhost } from '../utils/profile'
 
-const GAME_DURATION = 60
-
 // Core game state machine: idle -> countdown -> racing -> finished.
 // Also records a keystroke timeline so a personal best can be
 // replayed later as a "ghost" opponent.
-export function useGame({ mode = 'words', enableGhost = true, strict = false } = {}) {
+//
+// `mode` is the word-list flavor: 'words' | 'punctuation' | 'numbers'.
+// `limitType` is the pacing rule, a separate axis from `mode`:
+//   'time'  -> race ends when `limitValue` seconds elapse (or passage finishes early)
+//   'words' -> no timer; race ends only once the (exactly `limitValue`-word) passage
+//              is fully typed. `timeLeft` is unused; `elapsedSeconds` counts up instead.
+export function useGame({
+  mode = 'words',
+  enableGhost = true,
+  strict = false,
+  limitType = 'time',
+  limitValue = 60,
+} = {}) {
   const [passage, setPassage] = useState('')
   const [typed, setTyped] = useState('')
   const [phase, setPhase] = useState('idle')
   const [countdown, setCountdown] = useState(3)
-  const [timeLeft, setTimeLeft] = useState(GAME_DURATION)
+  const [timeLeft, setTimeLeft] = useState(limitType === 'time' ? limitValue : 0)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [wpm, setWpm] = useState(0)
   const [accuracy, setAccuracy] = useState(100)
   const [wpmHistory, setWpmHistory] = useState([])
@@ -36,13 +47,22 @@ export function useGame({ mode = 'words', enableGhost = true, strict = false } =
     clearInterval(cdRef.current)
   }
 
+  // In word-limit mode the passage IS the limit (exactly `limitValue` words).
+  // In time-limit mode we generate a generous buffer so fast typists don't run
+  // out of text before the clock does (3 words/sec covers well past 150+ wpm).
+  const wordCountFor = useCallback(
+    () => (limitType === 'words' ? limitValue : Math.max(30, Math.ceil(limitValue * 3))),
+    [limitType, limitValue]
+  )
+
   const reset = useCallback(() => {
     clearTimers()
-    setPassage(generatePassage(50, mode))
+    setPassage(generatePassage(wordCountFor(), mode))
     setTyped('')
     setPhase('idle')
     setCountdown(3)
-    setTimeLeft(GAME_DURATION)
+    setTimeLeft(limitType === 'time' ? limitValue : 0)
+    setElapsedSeconds(0)
     setWpm(0)
     setAccuracy(100)
     setWpmHistory([])
@@ -54,14 +74,35 @@ export function useGame({ mode = 'words', enableGhost = true, strict = false } =
     troubleRef.current = {}
     finishedRef.current = false
     ghostRef.current = enableGhost ? getGhost() : null
-  }, [mode, enableGhost])
+  }, [mode, enableGhost, limitType, limitValue, wordCountFor])
+
+  // Multiplayer needs everyone racing the SAME text. This swaps in a
+  // server-provided passage without touching phase/countdown timers,
+  // so it's safe to call right before startCountdown().
+  const applyPassage = useCallback((text) => {
+    setPassage(text)
+    setTyped('')
+    setTimeLeft(limitType === 'time' ? limitValue : 0)
+    setElapsedSeconds(0)
+    setWpm(0)
+    setAccuracy(100)
+    setWpmHistory([])
+    setGhostProgress(null)
+    setGhostWpm(0)
+    errorsRef.current = 0
+    keylogRef.current = []
+    troubleRef.current = {}
+    finishedRef.current = false
+    ghostRef.current = enableGhost ? getGhost() : null
+  }, [enableGhost, limitType, limitValue])
 
   const finishGame = useCallback(() => {
     if (finishedRef.current) return
     finishedRef.current = true
     clearTimers()
 
-    const elapsed = startRef.current ? (Date.now() - startRef.current) / 1000 : GAME_DURATION
+    const fallback = limitType === 'time' ? limitValue : 0
+    const elapsed = startRef.current ? (Date.now() - startRef.current) / 1000 : fallback
 
     setTyped(t => {
       const correct = t.split('').filter((ch, i) => ch === passage[i]).length
@@ -82,7 +123,7 @@ export function useGame({ mode = 'words', enableGhost = true, strict = false } =
     })
 
     setPhase('finished')
-  }, [passage, mode])
+  }, [passage, mode, limitType, limitValue])
 
   const beginRace = useCallback(() => {
     startRef.current = Date.now()
@@ -90,8 +131,14 @@ export function useGame({ mode = 'words', enableGhost = true, strict = false } =
 
     timerRef.current = setInterval(() => {
       const elapsed = (Date.now() - startRef.current) / 1000
-      const remaining = Math.max(0, GAME_DURATION - Math.floor(elapsed))
-      setTimeLeft(remaining)
+      setElapsedSeconds(Math.floor(elapsed))
+
+      let timedOut = false
+      if (limitType === 'time') {
+        const remaining = Math.max(0, limitValue - Math.floor(elapsed))
+        setTimeLeft(remaining)
+        timedOut = remaining <= 0
+      }
 
       // Sample wpm twice a second for the results chart
       setTyped(t => {
@@ -113,9 +160,9 @@ export function useGame({ mode = 'words', enableGhost = true, strict = false } =
         setGhostWpm(calcWpm(len, elapsed))
       }
 
-      if (remaining <= 0) finishGame()
+      if (timedOut) finishGame()
     }, 500)
-  }, [passage, finishGame])
+  }, [passage, finishGame, limitType, limitValue])
 
   const startCountdown = useCallback(() => {
     setPhase('countdown')
@@ -169,10 +216,10 @@ export function useGame({ mode = 'words', enableGhost = true, strict = false } =
   }, [reset])
 
   return {
-    passage, typed, phase, countdown, timeLeft,
+    passage, typed, phase, countdown, timeLeft, elapsedSeconds,
     wpm, accuracy, progress, charMap, wpmHistory,
     ghost: ghostRef.current ? { progress: ghostProgress ?? 0, wpm: ghostWpm, bestWpm: ghostRef.current.wpm } : null,
     troubleKeys: troubleRef.current,
-    startCountdown, handleInput, reset,
+    startCountdown, handleInput, reset, applyPassage,
   }
 }

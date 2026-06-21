@@ -17,6 +17,8 @@ const PHASE = {
   FINISHED: 'finished', // Results
 }
 
+const WORD_LIMITS = [15, 30, 50, 100]
+
 export default function MultiPlayer() {
   const navigate  = useNavigate()
   const { socket } = useSocket()
@@ -30,12 +32,17 @@ export default function MultiPlayer() {
   const [players,    setPlayers]    = useState([])
   const [oppProgress, setOppProgress] = useState({})
   const [strict,     setStrict]     = useState(false)
+  const [wordLimit,  setWordLimit]  = useState(30)
 
+  // No time limit in multiplayer (that's solo-only) — the race ends when the
+  // shared, word-count-sized passage is fully typed. limitType: 'words' just
+  // disables useGame's internal countdown-finish; the passage itself, once
+  // applied from the server, is what actually bounds the race.
   const {
     passage, typed, phase, countdown,
-    timeLeft, wpm, accuracy, progress, charMap,
-    startCountdown, handleInput, reset,
-  } = useGame({ strict })
+    elapsedSeconds, wpm, accuracy, progress, charMap,
+    startCountdown, handleInput, reset, applyPassage,
+  } = useGame({ strict, limitType: 'words', limitValue: wordLimit })
 
   // ── Connect socket on mount ───────────────────────────────────────────────
   useEffect(() => {
@@ -65,6 +72,7 @@ export default function MultiPlayer() {
 
   useSocketEvent('race:start', (payload) => {
     if (payload && typeof payload.strict === 'boolean') setStrict(payload.strict)
+    if (payload?.passage) applyPassage(payload.passage)
     setLobbyPhase(PHASE.RACING)
     startCountdown()
   })
@@ -112,7 +120,7 @@ export default function MultiPlayer() {
   }
 
   function startRace() {
-    emit('race:start', { code: roomCode, strict })
+    emit('race:start', { code: roomCode, strict, wordLimit })
   }
 
   function handlePlayAgain() {
@@ -182,6 +190,20 @@ export default function MultiPlayer() {
             </div>
           )}
 
+          <div className="flex items-center gap-2 flex-wrap justify-center">
+            <span className="font-mono text-xs text-faded uppercase tracking-widest mr-1">words</span>
+            {WORD_LIMITS.map(v => (
+              <button
+                key={v}
+                onClick={() => setWordLimit(v)}
+                className={`font-mono text-xs border-2 px-3 py-1.5 transition-colors
+                  ${wordLimit === v ? 'border-ink bg-ink text-paper' : 'border-line text-faded hover:border-ink'}`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+
           <button
             onClick={() => setStrict(s => !s)}
             title="Can't pass a word until it's typed correctly"
@@ -209,6 +231,9 @@ export default function MultiPlayer() {
             </p>
             <p className="text-5xl font-display font-mono text-signal tracking-[10px]">
               {roomCode}
+            </p>
+            <p className="font-mono text-[10px] tracking-[0.2em] uppercase text-faded mt-3">
+              {wordLimit} words {strict ? '· strict' : ''}
             </p>
             <div className="mt-6 space-y-2">
               {players.map((p, i) => (
@@ -241,7 +266,7 @@ export default function MultiPlayer() {
       {/* ── Racing ── */}
       {(lobbyPhase === PHASE.RACING) && (
         <>
-          <StatsBar wpm={wpm} accuracy={accuracy} timeLeft={timeLeft} progress={progress} />
+          <StatsBar wpm={wpm} accuracy={accuracy} timeLeft={elapsedSeconds} progress={progress} />
 
           {phase !== 'finished' && (
             <div className="relative bg-card border-2 border-ink shadow-flat p-7 min-h-[140px]">
@@ -268,7 +293,7 @@ export default function MultiPlayer() {
         <ResultsCard
           wpm={wpm}
           accuracy={accuracy}
-          duration={60 - timeLeft}
+          duration={elapsedSeconds}
           wpmHistory={[]}
           troubleKeys={{}}
           isPB={false}

@@ -47,13 +47,17 @@ export function registerSocketHandlers(io) {
     })
 
     // ── Start race ────────────────────────────────────────────────────────
-    socket.on('race:start', ({ code, strict }) => {
+    socket.on('race:start', ({ code, strict, wordLimit }) => {
       const room = rooms.get(code)
       if (!room) return
 
+      // Everyone in the room races the same text, sized to the host's
+      // chosen word count (falls back to the room's initial passage length).
+      const words = Number(wordLimit) > 0 ? Number(wordLimit) : 60
+      room.passage = generatePassage(words)
       room.started = true
       io.to(code).emit('race:start', { passage: room.passage, strict: !!strict })
-      console.log(`🏁 Race started in room ${code}`)
+      console.log(`🏁 Race started in room ${code} (${words} words)`)
     })
 
     // ── Player progress update ────────────────────────────────────────────
