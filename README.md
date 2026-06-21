@@ -45,4 +45,5 @@ Open http://localhost:5173.
 ## Deploy
 
 Backend → Render (root dir `backend`, set `CLIENT_URL`).
+
 Frontend → Vercel (root dir `frontend`, set `VITE_SERVER_URL`).
