@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSocket } from '../context/SocketContext'
 import { useSocketEvent, useSocketEmit } from '../hooks/useSocketEvents'
 import { useGame } from '../hooks/useGame'
+import { loadPlayerName, savePlayerName } from '../utils/profile'
+import { SERVER_URL } from '../utils/apiBase'
 import StatsBar         from '../components/StatsBar'
 import TextDisplay      from '../components/TextDisplay'
 import TypingInput      from '../components/TypingInput'
@@ -33,6 +35,14 @@ export default function MultiPlayer() {
   const [oppProgress, setOppProgress] = useState({})
   const [strict,     setStrict]     = useState(false)
   const [wordLimit,  setWordLimit]  = useState(30)
+  const [playerName, setPlayerName] = useState(() => loadPlayerName())
+  const submittedRef = useRef(false)   // guards against double-posting a score
+
+  function handleNameChange(v) {
+    const name = v.slice(0, 20)
+    setPlayerName(name)
+    savePlayerName(name)
+  }
 
   // No time limit in multiplayer (that's solo-only) — the race ends when the
   // shared, word-count-sized passage is fully typed. limitType: 'words' just
@@ -73,6 +83,7 @@ export default function MultiPlayer() {
   useSocketEvent('race:start', (payload) => {
     if (payload && typeof payload.strict === 'boolean') setStrict(payload.strict)
     if (payload?.passage) applyPassage(payload.passage)
+    submittedRef.current = false
     setLobbyPhase(PHASE.RACING)
     startCountdown()
   })
@@ -84,6 +95,25 @@ export default function MultiPlayer() {
   useSocketEvent('race:finished', ({ winner }) => {
     setLobbyPhase(PHASE.FINISHED)
   })
+
+  // ── Submit to the global leaderboard ──────────────────────────────────────
+  // Fires once THIS client's own typing is done (useGame's phase, not the
+  // lobby phase) so a slower player isn't scored before they've finished —
+  // the lobby can flip to FINISHED for everyone as soon as the winner does.
+  useEffect(() => {
+    if (phase !== 'finished' || submittedRef.current) return
+    const name = playerName.trim()
+    if (!name) return
+
+    submittedRef.current = true
+    fetch(`${SERVER_URL}/api/leaderboard`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playerName: name, wpm, accuracy, mode: 'multi' }),
+    }).catch(() => {
+      // Leaderboard is a nice-to-have — a failed post shouldn't break the race
+    })
+  }, [phase, playerName, wpm, accuracy])
 
   // ── Emit progress updates while racing ───────────────────────────────────
   // The server broadcasts to everyone *except* the sender. Our own car is
@@ -109,14 +139,15 @@ export default function MultiPlayer() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   function hostRoom() {
+    if (!playerName.trim()) return
     setIsHost(true)
-    emit('room:create', { playerName: 'Player' })
+    emit('room:create', { playerName: playerName.trim() })
   }
 
   function joinRoom() {
     setJoinError('')
-    if (joinInput.length < 4) return
-    emit('room:join', { code: joinInput.toUpperCase(), playerName: 'Guest' })
+    if (joinInput.length < 4 || !playerName.trim()) return
+    emit('room:join', { code: joinInput.toUpperCase(), playerName: playerName.trim() })
   }
 
   function startRace() {
@@ -147,11 +178,32 @@ export default function MultiPlayer() {
       {lobbyPhase === PHASE.HOME && (
         <div className="flex flex-col items-center gap-5 py-10">
           <h2 className="text-2xl font-display text-ink">Multiplayer</h2>
+
+          <div className="flex flex-col gap-2 w-full max-w-xs">
+            <label className="font-mono text-xs text-faded uppercase tracking-widest text-center">
+              your name
+            </label>
+            <input
+              value={playerName}
+              onChange={e => handleNameChange(e.target.value)}
+              maxLength={20}
+              autoFocus
+              placeholder="racer name"
+              className="w-full bg-card border border-line rounded-xl
+                         text-ink font-mono text-base text-center py-2.5
+                         focus:outline-none focus:border-ink"
+            />
+            <p className="font-mono text-[10px] text-faded text-center">
+              shown to other racers + the global leaderboard
+            </p>
+          </div>
+
           <div className="flex gap-3 w-full max-w-xs">
             <button
               onClick={hostRoom}
+              disabled={!playerName.trim()}
               className="flex-1 btn btn-primary !rounded-none py-3 
-                         text-sm hover:opacity-90 transition-all"
+                         text-sm hover:opacity-90 disabled:opacity-30 transition-all"
             >
               Host Room
             </button>
@@ -181,7 +233,7 @@ export default function MultiPlayer() {
               )}
               <button
                 onClick={joinRoom}
-                disabled={joinInput.length < 4}
+                disabled={joinInput.length < 4 || !playerName.trim()}
                 className="w-full btn btn-primary !rounded-none py-3 
                            text-sm disabled:opacity-30 hover:opacity-90 transition-all"
               >

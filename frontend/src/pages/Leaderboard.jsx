@@ -1,25 +1,29 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-
-const DEMO = [
-  { playerName: 'mach_ten', wpm: 142, accuracy: 98, createdAt: '2026-06-01' },
-  { playerName: 'keysmith', wpm: 128, accuracy: 96, createdAt: '2026-05-30' },
-  { playerName: 'wpm_wanderer', wpm: 115, accuracy: 94, createdAt: '2026-05-28' },
-  { playerName: 'slow_lorist', wpm: 108, accuracy: 99, createdAt: '2026-05-27' },
-  { playerName: 'qwerty_quinn', wpm: 95, accuracy: 92, createdAt: '2026-05-25' },
-]
+import { SERVER_URL } from '../utils/apiBase'
 
 export default function Leaderboard() {
   const navigate = useNavigate()
   const [scores, setScores] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [status, setStatus] = useState('loading') // 'loading' | 'ok' | 'error'
 
   useEffect(() => {
-    fetch('/api/leaderboard')
-      .then(r => r.json())
-      .then(setScores)
-      .catch(() => setScores(DEMO))
-      .finally(() => setLoading(false))
+    let cancelled = false
+    fetch(`${SERVER_URL}/api/leaderboard`)
+      .then(r => {
+        if (!r.ok) throw new Error('bad response')
+        return r.json()
+      })
+      .then(data => {
+        if (cancelled) return
+        setScores(Array.isArray(data) ? data : [])
+        setStatus('ok')
+      })
+      .catch(() => {
+        if (cancelled) return
+        setStatus('error')
+      })
+    return () => { cancelled = true }
   }, [])
 
   return (
@@ -29,9 +33,23 @@ export default function Leaderboard() {
         <button onClick={() => navigate('/')} className="btn">← home</button>
       </header>
 
-      {loading ? (
+      {status === 'loading' && (
         <p className="font-mono text-xs text-faded text-center py-10">loading…</p>
-      ) : (
+      )}
+
+      {status === 'error' && (
+        <p className="font-mono text-xs text-faded text-center py-10">
+          couldn't reach the leaderboard — the server may be waking up, try again in a moment
+        </p>
+      )}
+
+      {status === 'ok' && scores.length === 0 && (
+        <p className="font-mono text-xs text-faded text-center py-10">
+          no scores yet — finish a multiplayer race to claim the top spot
+        </p>
+      )}
+
+      {status === 'ok' && scores.length > 0 && (
         <div className="bg-card border-2 border-ink shadow-flat">
           <table className="w-full">
             <thead>
@@ -44,7 +62,7 @@ export default function Leaderboard() {
             </thead>
             <tbody>
               {scores.map((s, i) => (
-                <tr key={i} className="border-b border-line last:border-0 font-mono text-sm">
+                <tr key={s._id ?? i} className="border-b border-line last:border-0 font-mono text-sm">
                   <td className="px-4 py-3 text-faded">{i + 1}</td>
                   <td className={`px-4 py-3 ${i === 0 ? 'font-semibold' : ''}`}>
                     {i === 0 && <span className="stamp text-gold border-gold mr-2 text-[9px]">champ</span>}

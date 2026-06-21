@@ -2,6 +2,25 @@
 // Everything lives in localStorage so the app works fully offline.
 
 const KEY = 'velodrome.profile.v1'
+const NAME_KEY = 'velodrome.playerName'
+
+// A "temporary" name for multiplayer — no account behind it, just a
+// convenience so returning players don't retype it every visit.
+export function loadPlayerName() {
+  try {
+    return localStorage.getItem(NAME_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function savePlayerName(name) {
+  try {
+    localStorage.setItem(NAME_KEY, name)
+  } catch {
+    // localStorage unavailable — fine, the name just won't persist
+  }
+}
 
 function load() {
   try {

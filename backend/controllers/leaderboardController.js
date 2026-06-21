@@ -26,9 +26,10 @@ export async function submitScore(req, res) {
 
   try {
     if (!Score.db?.readyState) {
-      // In-memory store
+      // In-memory store (capped so it can't grow without bound)
       const entry = { playerName, wpm, accuracy, mode: mode || 'solo', createdAt: new Date() }
       memoryScores.push(entry)
+      if (memoryScores.length > 500) memoryScores.shift()
       return res.status(201).json(entry)
     }
     const score = await Score.create({ playerName, wpm, accuracy, mode })
