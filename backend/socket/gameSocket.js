@@ -3,13 +3,21 @@ import { generateRoomCode, generatePassage } from '../utils/gameUtils.js'
 // rooms: Map<code, { players: [{id, name}], passage: string, started: bool }>
 const rooms = new Map()
 
+function generateUniqueRoomCode() {
+  let code
+  do {
+    code = generateRoomCode()
+  } while (rooms.has(code))
+  return code
+}
+
 export function registerSocketHandlers(io) {
   io.on('connection', (socket) => {
     console.log(`🔌 Connected: ${socket.id}`)
 
     // ── Create room ───────────────────────────────────────────────────────
     socket.on('room:create', ({ playerName }) => {
-      const code = generateRoomCode()
+      const code = generateUniqueRoomCode()
       rooms.set(code, {
         players: [{ id: socket.id, name: playerName || 'Player 1' }],
         passage: generatePassage(60),
