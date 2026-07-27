@@ -27,7 +27,6 @@ export default function MultiPlayer() {
   const emit      = useSocketEmit()
 
   const [lobbyPhase, setLobbyPhase] = useState(PHASE.HOME)
-  const [isHost,     setIsHost]     = useState(false)
   const [intent,     setIntent]     = useState(null)   // null | 'host' | 'join'
   const [roomCode,   setRoomCode]   = useState('')
   const [joinInput,  setJoinInput]  = useState('')
@@ -62,8 +61,9 @@ export default function MultiPlayer() {
   }, [socket])
 
   // ── Socket events ─────────────────────────────────────────────────────────
-  useSocketEvent('room:created', ({ code }) => {
+  useSocketEvent('room:created', ({ code, players: p }) => {
     setRoomCode(code)
+    setPlayers(p ?? [])
     setLobbyPhase(PHASE.LOBBY)
   })
 
@@ -97,6 +97,15 @@ export default function MultiPlayer() {
     setLobbyPhase(PHASE.FINISHED)
   })
 
+  // Host called a rematch — back to the lobby with the same room/players,
+  // where the host can retune the options before starting again.
+  useSocketEvent('room:rematch', ({ players: p }) => {
+    if (p) setPlayers(p)
+    setOppProgress({})
+    reset()
+    setLobbyPhase(PHASE.LOBBY)
+  })
+
   // ── Submit to the global leaderboard ──────────────────────────────────────
   // Fires once THIS client's own typing is done (useGame's phase, not the
   // lobby phase) so a slower player isn't scored before they've finished —
@@ -125,6 +134,10 @@ export default function MultiPlayer() {
     }
   }, [progress, wpm, phase, emit])
 
+  // Host is tracked server-side (and reassigned if the host leaves), so derive
+  // it from the player list rather than from who happened to click "Host".
+  const isHost = players.some(p => p.id === socket?.id && p.isHost)
+
   // Build the racer list fresh on every render: your live car + opponents.
   const racers = players.map(p => {
     const you = p.id === socket?.id
@@ -141,7 +154,6 @@ export default function MultiPlayer() {
   // ── Handlers ──────────────────────────────────────────────────────────────
   function hostRoom() {
     if (!playerName.trim()) return
-    setIsHost(true)
     emit('room:create', { playerName: playerName.trim() })
   }
 
@@ -155,13 +167,20 @@ export default function MultiPlayer() {
     emit('race:start', { code: roomCode, strict, wordLimit })
   }
 
-  function handlePlayAgain() {
+  // Rematch with the same people — the server puts everyone back in the lobby.
+  function raceAgain() {
+    emit('race:again', { code: roomCode })
+  }
+
+  // Leave the room entirely and go back to the host/join menu.
+  function leaveRoom() {
+    emit('room:leave')
     reset()
+    setOppProgress({})
     setLobbyPhase(PHASE.HOME)
     setRoomCode('')
     setPlayers([])
     setIntent(null)
-    setIsHost(false)
     setJoinError('')
   }
 
@@ -368,8 +387,12 @@ export default function MultiPlayer() {
           troubleKeys={{}}
           isPB={false}
           chars={typed.length}
-          onPlayAgain={handlePlayAgain}
-          onHome={() => navigate('/')}
+          onPlayAgain={isHost ? raceAgain : undefined}
+          playAgainLabel={isHost ? 'Race again →' : 'Waiting for host…'}
+          playAgainDisabled={!isHost}
+          onHome={leaveRoom}
+          homeLabel="Leave room"
+          hint={`room ${roomCode} · ${players.length} racer${players.length === 1 ? '' : 's'}`}
         />
       )}
     </main>

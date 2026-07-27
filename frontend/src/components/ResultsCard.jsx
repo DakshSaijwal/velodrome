@@ -1,6 +1,12 @@
 import WpmChart from './WpmChart'
 
-export default function ResultsCard({ wpm, accuracy, duration, chars, wpmHistory, troubleKeys, isPB, onPlayAgain, onHome }) {
+export default function ResultsCard({
+  wpm, accuracy, duration, chars, wpmHistory, troubleKeys, isPB, onPlayAgain, onHome,
+  playAgainLabel = 'Race again →',
+  playAgainDisabled = false,
+  homeLabel = 'Pit lane (home)',
+  hint = '',
+}) {
   const trouble = Object.entries(troubleKeys ?? {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, 4)
@@ -46,9 +52,22 @@ export default function ResultsCard({ wpm, accuracy, duration, chars, wpmHistory
         </div>
       )}
 
-      <div className="flex gap-3">
-        <button onClick={onPlayAgain} className="btn btn-primary flex-1">Race again →</button>
-        <button onClick={onHome} className="btn flex-1">Pit lane (home)</button>
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-3">
+          <button
+            onClick={onPlayAgain}
+            disabled={playAgainDisabled}
+            className="btn btn-primary flex-1 disabled:opacity-30"
+          >
+            {playAgainLabel}
+          </button>
+          <button onClick={onHome} className="btn flex-1">{homeLabel}</button>
+        </div>
+        {hint && (
+          <p className="font-mono text-[10px] tracking-[0.2em] uppercase text-faded text-center">
+            {hint}
+          </p>
+        )}
       </div>
     </div>
   )
