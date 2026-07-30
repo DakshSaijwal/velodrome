@@ -40,7 +40,13 @@ export function useGame({
   const finishedRef = useRef(false)
 
   const charMap = buildCharMap(passage, typed)
-  const progress = passage.length ? Math.round((typed.length / passage.length) * 100) : 0
+
+  // Progress counts characters that are correct *at their position*, not how
+  // much has been typed. Measuring raw length let a multiplayer player mash
+  // random keys and drive their car to the finish line. A typo doesn't stall
+  // the car at the mistake — it just doesn't count until it's corrected.
+  const correctChars = typed.split('').filter((ch, i) => ch === passage[i]).length
+  const progress = passage.length ? Math.round((correctChars / passage.length) * 100) : 0
 
   const clearTimers = () => {
     clearInterval(timerRef.current)
@@ -207,7 +213,13 @@ export function useGame({
     setTyped(value)
     setAccuracy(calcAccuracy(value.length, errorsRef.current))
 
-    if (value.length >= passage.length) finishGame()
+    // Strict mode can't be more than the current word wrong, so requiring an
+    // exact match is safe there — and it's what stops a player mashing the
+    // final word (which has no trailing space to block them) to cross the
+    // line. Without strict, an early typo could strand you hundreds of
+    // backspaces from the end, so length alone still ends the run.
+    const complete = strict ? value === passage : value.length >= passage.length
+    if (complete) finishGame()
   }, [phase, typed, passage, strict, finishGame])
 
   useEffect(() => {
@@ -217,7 +229,7 @@ export function useGame({
 
   return {
     passage, typed, phase, countdown, timeLeft, elapsedSeconds,
-    wpm, accuracy, progress, charMap, wpmHistory,
+    wpm, accuracy, progress, correctChars, charMap, wpmHistory,
     ghost: ghostRef.current ? { progress: ghostProgress ?? 0, wpm: ghostWpm, bestWpm: ghostRef.current.wpm } : null,
     troubleKeys: troubleRef.current,
     startCountdown, handleInput, reset, applyPassage,

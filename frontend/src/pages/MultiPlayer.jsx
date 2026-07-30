@@ -33,7 +33,6 @@ export default function MultiPlayer() {
   const [joinError,  setJoinError]  = useState('')
   const [players,    setPlayers]    = useState([])
   const [oppProgress, setOppProgress] = useState({})
-  const [strict,     setStrict]     = useState(false)
   const [wordLimit,  setWordLimit]  = useState(30)
   const [playerName, setPlayerName] = useState(() => loadPlayerName())
   const submittedRef = useRef(false)   // guards against double-posting a score
@@ -50,9 +49,12 @@ export default function MultiPlayer() {
   // applied from the server, is what actually bounds the race.
   const {
     passage, typed, phase, countdown,
-    elapsedSeconds, wpm, accuracy, progress, charMap,
+    elapsedSeconds, wpm, accuracy, progress, correctChars, charMap,
     startCountdown, handleInput, reset, applyPassage,
-  } = useGame({ strict, limitType: 'words', limitValue: wordLimit })
+    // Strict is always on in multiplayer: it's what makes the race honest.
+    // You can't leave a word until it's correct, so mashing random keys
+    // stalls at the first space instead of driving your car up the track.
+  } = useGame({ strict: true, limitType: 'words', limitValue: wordLimit })
 
   // ── Connect socket on mount ───────────────────────────────────────────────
   useEffect(() => {
@@ -82,7 +84,6 @@ export default function MultiPlayer() {
   })
 
   useSocketEvent('race:start', (payload) => {
-    if (payload && typeof payload.strict === 'boolean') setStrict(payload.strict)
     if (payload?.passage) applyPassage(payload.passage)
     submittedRef.current = false
     setOppProgress({})        // otherwise cars start where the last race ended
@@ -139,7 +140,9 @@ export default function MultiPlayer() {
   //  · we send an unrounded percentage. `progress` is rounded to whole
   //    percent, and on a 100-word passage 1% is ~5 characters, so opponents'
   //    cars would visibly hop every second instead of gliding.
-  const livePercent = passage.length ? (typed.length / passage.length) * 100 : 0
+  //  · it's built from correctly-typed characters, so mashing keys doesn't
+  //    move your car.
+  const livePercent = passage.length ? (correctChars / passage.length) * 100 : 0
   useEffect(() => {
     if (lobbyPhase !== PHASE.RACING) return
     if (phase !== 'racing' && phase !== 'finished') return
@@ -177,7 +180,7 @@ export default function MultiPlayer() {
   }
 
   function startRace() {
-    emit('race:start', { code: roomCode, strict, wordLimit })
+    emit('race:start', { code: roomCode, wordLimit })
   }
 
   // Rematch with the same people — the server puts everyone back in the lobby.
@@ -270,14 +273,10 @@ export default function MultiPlayer() {
                 ))}
               </div>
 
-              <button
-                onClick={() => setStrict(s => !s)}
-                title="Can't pass a word until it's typed correctly"
-                className={`font-mono text-xs border-2 px-3 py-1.5 transition-colors
-                  ${strict ? 'border-signal bg-signal text-paper' : 'border-line text-faded hover:border-ink'}`}
-              >
-                strict mode {strict ? 'on' : 'off'}
-              </button>
+              <p className="font-mono text-[10px] text-faded text-center leading-relaxed">
+                strict mode is always on in multiplayer —<br />
+                you can't leave a word until it's typed correctly
+              </p>
 
               <button
                 onClick={hostRoom}
@@ -335,7 +334,7 @@ export default function MultiPlayer() {
               {roomCode}
             </p>
             <p className="font-mono text-[10px] tracking-[0.2em] uppercase text-faded mt-3">
-              {wordLimit} words {strict ? '· strict' : ''}
+              {wordLimit} words · strict
             </p>
             <div className="mt-6 space-y-2">
               {players.map((p, i) => (
