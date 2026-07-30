@@ -85,6 +85,7 @@ export default function MultiPlayer() {
     if (payload && typeof payload.strict === 'boolean') setStrict(payload.strict)
     if (payload?.passage) applyPassage(payload.passage)
     submittedRef.current = false
+    setOppProgress({})        // otherwise cars start where the last race ended
     setLobbyPhase(PHASE.RACING)
     startCountdown()
   })
@@ -128,11 +129,22 @@ export default function MultiPlayer() {
   // ── Emit progress updates while racing ───────────────────────────────────
   // The server broadcasts to everyone *except* the sender. Our own car is
   // computed at render time from live `progress`/`wpm`, so it always moves.
+  //
+  // Two things this has to get right:
+  //  · 'finished' must emit as well as 'racing'. finishGame() flips the phase
+  //    in the same React batch as the last keystroke, so there is no render
+  //    where progress is 100 and phase is still 'racing' — gating on 'racing'
+  //    alone means the 100% update is never sent, the server never declares a
+  //    winner, and the race hangs forever.
+  //  · we send an unrounded percentage. `progress` is rounded to whole
+  //    percent, and on a 100-word passage 1% is ~5 characters, so opponents'
+  //    cars would visibly hop every second instead of gliding.
+  const livePercent = passage.length ? (typed.length / passage.length) * 100 : 0
   useEffect(() => {
-    if (phase === 'racing') {
-      emit('race:progress', { progress, wpm })
-    }
-  }, [progress, wpm, phase, emit])
+    if (lobbyPhase !== PHASE.RACING) return
+    if (phase !== 'racing' && phase !== 'finished') return
+    emit('race:progress', { progress: livePercent, wpm })
+  }, [livePercent, wpm, phase, lobbyPhase, emit])
 
   // Host is tracked server-side (and reassigned if the host leaves), so derive
   // it from the player list rather than from who happened to click "Host".
@@ -145,7 +157,8 @@ export default function MultiPlayer() {
     return {
       id: p.id,
       name: you ? 'you' : p.name,
-      progress: you ? progress : (opp?.progress ?? 0),
+      // Same unrounded value we broadcast, so your car glides like theirs.
+      progress: you ? livePercent : (opp?.progress ?? 0),
       wpm: you ? wpm : (opp?.wpm ?? 0),
       isYou: you,
     }
