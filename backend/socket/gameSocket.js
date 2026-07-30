@@ -92,7 +92,7 @@ export function registerSocketHandlers(io) {
     })
 
     // ── Start race ────────────────────────────────────────────────────────
-    socket.on('race:start', ({ code, strict, wordLimit }) => {
+    socket.on('race:start', ({ code, wordLimit }) => {
       const room = rooms.get(code)
       if (!room) return
       if (socket.id !== room.hostId) return
@@ -103,7 +103,9 @@ export function registerSocketHandlers(io) {
       room.passage = generatePassage(words)
       room.started = true
       room.winner = null   // otherwise a rematch could never declare a winner
-      io.to(code).emit('race:start', { passage: room.passage, strict: !!strict })
+      // strict isn't the host's to choose in multiplayer — without it a
+      // player can mash keys and still advance, so the server dictates it.
+      io.to(code).emit('race:start', { passage: room.passage, strict: true })
       console.log(`🏁 Race started in room ${code} (${words} words)`)
     })
 
